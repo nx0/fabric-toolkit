@@ -5,16 +5,18 @@ from fabric.utils import *
 import string
 
 
-env.password = "root"
+env.password = "localux"
 env.user = "root"
 env.port = "22"
 env.warn_only = True
 env.skip_bad_hosts = True
+env.disable_known_hosts = True
 
 @task
 def prepare_hn(reboot="no"):
 	run('yum -y install sudo')
 	run('yum -y install wget')
+	run('yum -y install nmap')
 
 	templatevz = "centos-6-x86_64"
 	with hide('warnings','running','stderr','stdout'):
@@ -33,7 +35,7 @@ def epel_setup():
 	epel = sudo('stat /etc/yum.repos.d/epel.repo')
 	if epel.return_code != int(0):
 		print(cyan('['+env.host+'] instalando epel (release: ' + epelrelease + ')...'))
-		sudo('yum -y install ' + epelurl + '$(uname -p)' + '/epel-release-' + epelrelease + '.noarch.rpm')
+		run('yum -y install ' + epelurl + '$(uname -p)' + '/epel-release-' + epelrelease + '.noarch.rpm')
 		print(green('['+env.host+'] epel instalado ...'))
 	else:
 		print(yellow('['+env.host+'] epel ya instalado'))
@@ -61,7 +63,7 @@ def openvz_templatesetup(template):
 
 
 @task
-def create_machine(num=0,template="centos",basename="vz",config="light",network="192.168.1"):
+def create_machine(num=0,template="centos",basename="vz",config="basic",network="192.168.1",puppet="yes",onboot="no",password="admin"):
 	with hide('warnings','running','stderr','stdout'):
 		if num==0:
 			sudo('vzctl create 100 --ostemplate centos-6-x86_64 --hostname vz01 --config light')
@@ -86,8 +88,18 @@ def create_machine(num=0,template="centos",basename="vz",config="light",network=
 			while(total < int(num)):
 				createveid=str(veids[total])
 				print(green('['+createveid+']: creando '+template+' ('+config+') con ip: '+gaga[total]))
-				sudo('vzctl create '+createveid+' --ostemplate centos-6-x86_64 --hostname vz'+createveid+' --config light')
-				sudo('vzctl set '+createveid+' --ipadd '+gaga[total]+' --save')
+				run('vzctl create '+createveid+' --ostemplate centos-6-x86_64 --hostname vz'+createveid+' --config '+config)
+				run('vzctl set '+createveid+' --ipadd '+gaga[total]+' --save')
+				run('vzctl start '+createveid)
+				run('vzctl exec '+createveid+' "echo -e \''+password+'\\'+password+'\' | passwd"')
+				#env.hosts(gaga[total])
+				#execute(epel_setup)
+				if puppet == "yes":
+					run('vzctl exec '+createveid+' yum install puppet')
+
+				if onboot == "yes":
+					run('vzctl set '+createveid+' --onboot yes --save')
+
 				print('ok')
 				total = total + 1
 
